@@ -192,15 +192,25 @@ out body;
         if not elements:
             return None
 
-        # If single POI, return it
-        if len(elements) == 1:
-            element = elements[0]
+        # Helper function to extract POI data with address tags
+        def extract_poi_data(element):
+            tags = element.get('tags', {})
             return {
                 'latitude': element['lat'],
                 'longitude': element['lon'],
-                'name': element.get('tags', {}).get('name', 'Unknown'),
-                'osm_id': element['id']
+                'name': tags.get('name', 'Unknown'),
+                'osm_id': element['id'],
+                # Extract address tags from OSM
+                'street': tags.get('addr:street'),
+                'housenumber': tags.get('addr:housenumber'),
+                'postcode': tags.get('addr:postcode'),
+                'city': tags.get('addr:city'),
+                'country': tags.get('addr:country')
             }
+
+        # If single POI, return it
+        if len(elements) == 1:
+            return extract_poi_data(elements[0])
 
         # Multiple POIs - find closest one
         closest_poi = None
@@ -215,12 +225,7 @@ out body;
 
             if distance < min_distance:
                 min_distance = distance
-                closest_poi = {
-                    'latitude': poi_lat,
-                    'longitude': poi_lon,
-                    'name': element.get('tags', {}).get('name', 'Unknown'),
-                    'osm_id': element['id']
-                }
+                closest_poi = extract_poi_data(element)
 
         return closest_poi
 
@@ -252,3 +257,114 @@ out body;
         c = 2 * math.asin(math.sqrt(a))
 
         return R * c
+
+    def _extract_base_name(self, full_name: str) -> str:
+        """
+        Extract base store name by removing city suffix.
+
+        Removes the last word from store name which is typically the city.
+        For example: "Denns BioMarkt Erlangen" → "Denns BioMarkt"
+
+        Args:
+            full_name: Full store name including city
+
+        Returns:
+            Base store name without city suffix
+        """
+        if not full_name:
+            return ""
+
+        parts = full_name.strip().split()
+
+        # Only remove last word if there are more than 2 words
+        # This prevents "Speisekammer Hof" from becoming just "Speisekammer"
+        if len(parts) > 2:
+            return ' '.join(parts[:-1])
+
+        return full_name
+
+    def search_poi_with_variants(self, store_name: str, lat: float, lon: float, radius: int = 100) -> Optional[Dict[str, Any]]:
+        """
+        Search for POI with multiple name variants.
+
+        Tries multiple exact and fuzzy name patterns to find the POI:
+        1. Exact: "Denns BioMarkt" (city removed)
+        2. Exact: "Denns Biomarkt" (lowercase 'i' in Bio)
+        3. Exact: "denn's Biomarkt" (with apostrophe)
+        4. Fuzzy: "denn's" (with shop tag)
+        5. Fuzzy: "Denns" (with shop tag)
+
+        Stops at first successful match.
+
+        Args:
+            store_name: Full store name (e.g., "Denns BioMarkt Erlangen")
+            lat: Latitude for search center
+            lon: Longitude for search center
+            radius: Search radius in meters (default: 100)
+
+        Returns:
+            POI data with 'matched_variant' field, or None if not found
+        """
+        # Extract base name (remove city)
+        base_name = self._extract_base_name(store_name)
+
+        # Define exact match variants
+        exact_variants = [
+            base_name,  # "Denns BioMarkt"
+            base_name.replace('BioMarkt', 'Biomarkt'),  # "Denns Biomarkt"
+            base_name.replace('Denns', "denn's")  # "denn's BioMarkt"
+        ]
+
+        # Try exact matches first
+        for variant in exact_variants:
+            logger.debug(f"Trying exact match: '{variant}'")
+            result = self.search_poi_exact(variant, lat, lon, radius)
+            if result:
+                result['matched_variant'] = variant
+                logger.info(f"Found POI with exact match: '{variant}'")
+                return result
+
+        # Define fuzzy patterns
+        fuzzy_patterns = ["denn's", "Denns"]
+
+        # Try fuzzy matches
+        for pattern in fuzzy_patterns:
+            logger.debug(f"Trying fuzzy match: '{pattern}'")
+            result = self.search_poi_fuzzy(pattern, lat, lon, radius)
+            if result:
+                result['matched_variant'] = f"fuzzy:{pattern}"
+                logger.info(f"Found POI with fuzzy match: '{pattern}'")
+                return result
+
+        logger.debug(f"No POI found for any variant of '{store_name}'")
+        return None
+
+    def validate_poi_against_scraper(self, poi_lat: float, poi_lon: float,
+                                    scraper_lat: float, scraper_lon: float,
+                                    threshold: float = 100.0) -> tuple:
+        """
+        Validate POI coordinates against scraper coordinates.
+
+        Calculates the distance between POI and scraper coordinates to determine
+        if they represent the same location.
+
+        Args:
+            poi_lat: POI latitude from Overpass
+            poi_lon: POI longitude from Overpass
+            scraper_lat: Scraper latitude from database
+            scraper_lon: Scraper longitude from database
+            threshold: Maximum distance in meters to consider valid (default: 100m)
+
+        Returns:
+            Tuple of (distance_meters, is_valid)
+            - distance_meters: Distance between coordinates in meters
+            - is_valid: True if distance < threshold, False otherwise
+        """
+        distance = self._haversine_distance(poi_lat, poi_lon, scraper_lat, scraper_lon)
+        is_valid = distance < threshold
+
+        logger.debug(
+            f"POI validation: distance={distance:.1f}m, threshold={threshold}m, valid={is_valid}"
+        )
+
+        return (distance, is_valid)
