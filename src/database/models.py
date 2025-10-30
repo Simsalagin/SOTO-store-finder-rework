@@ -40,6 +40,11 @@ OSM_MIGRATION_SQL = [
 ]
 
 # Migration SQL for adding final coordinate columns for Leaflet
+# geocoding_confidence values:
+#   - very_high: Overpass POI validated by scraper (< 100m distance)
+#   - high: Overpass POI found (no scraper validation or > 100m distance)
+#   - medium: Scraper coordinates only (no POI found)
+#   - low: Nominatim address-level geocoding
 FINAL_COORDS_MIGRATION_SQL = [
     "ALTER TABLE stores ADD COLUMN final_latitude REAL",
     "ALTER TABLE stores ADD COLUMN final_longitude REAL",

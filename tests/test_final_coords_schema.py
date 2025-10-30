@@ -143,13 +143,20 @@ def test_geocoding_source_values(test_db_path):
 
 
 def test_geocoding_confidence_values(test_db_path):
-    """Test that geocoding_confidence accepts expected values."""
+    """Test that geocoding_confidence accepts all four expected values.
+
+    Confidence levels:
+    - very_high: Overpass POI validated by scraper (< 100m distance)
+    - high: Overpass POI found (no scraper validation or > 100m distance)
+    - medium: Scraper coordinates only (no POI found)
+    - low: Nominatim address-level geocoding
+    """
     from database.db_manager import DatabaseManager
 
     db = DatabaseManager(test_db_path)
 
-    # Test all three confidence values
-    confidences = ['high', 'medium', 'low']
+    # Test all four confidence values
+    confidences = ['very_high', 'high', 'medium', 'low']
 
     for idx, confidence in enumerate(confidences, start=1):
         store_data = {
@@ -170,6 +177,6 @@ def test_geocoding_confidence_values(test_db_path):
     cursor.execute("SELECT geocoding_confidence FROM stores ORDER BY market_id")
     results = [row[0] for row in cursor.fetchall()]
 
-    assert results == confidences, "All confidence levels should be stored correctly"
+    assert results == confidences, "All four confidence levels should be stored correctly"
 
     db.close()
