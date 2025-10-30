@@ -16,10 +16,24 @@ CREATE TABLE IF NOT EXISTS stores (
     opening_day DATE,
     is_loyalty_market BOOLEAN,
     google_maps_link TEXT,
+    osm_latitude REAL,
+    osm_longitude REAL,
+    osm_checked BOOLEAN DEFAULT 0,
+    osm_checked_at TIMESTAMP,
+    osm_display_name TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 """
+
+# Migration SQL for adding OSM columns to existing databases
+OSM_MIGRATION_SQL = [
+    "ALTER TABLE stores ADD COLUMN osm_latitude REAL",
+    "ALTER TABLE stores ADD COLUMN osm_longitude REAL",
+    "ALTER TABLE stores ADD COLUMN osm_checked BOOLEAN DEFAULT 0",
+    "ALTER TABLE stores ADD COLUMN osm_checked_at TIMESTAMP",
+    "ALTER TABLE stores ADD COLUMN osm_display_name TEXT"
+]
 
 OPENING_HOURS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS opening_hours (

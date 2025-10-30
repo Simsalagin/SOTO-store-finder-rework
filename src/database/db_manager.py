@@ -6,9 +6,9 @@ from typing import Dict, List, Any, Optional
 from datetime import datetime
 
 try:
-    from .models import STORES_TABLE_SQL, OPENING_HOURS_TABLE_SQL, CREATE_INDEX_SQL
+    from .models import STORES_TABLE_SQL, OPENING_HOURS_TABLE_SQL, CREATE_INDEX_SQL, OSM_MIGRATION_SQL
 except ImportError:
-    from database.models import STORES_TABLE_SQL, OPENING_HOURS_TABLE_SQL, CREATE_INDEX_SQL
+    from database.models import STORES_TABLE_SQL, OPENING_HOURS_TABLE_SQL, CREATE_INDEX_SQL, OSM_MIGRATION_SQL
 
 
 logger = logging.getLogger(__name__)
@@ -49,8 +49,39 @@ class DatabaseManager:
             cursor.execute(CREATE_INDEX_SQL)
             self.conn.commit()
             logger.info("Database tables created/verified")
+
+            # Run OSM migration for existing databases
+            self._migrate_osm_columns()
         except sqlite3.Error as e:
             logger.error(f"Error creating tables: {e}")
+            raise
+
+    def _migrate_osm_columns(self):
+        """Add OSM columns to existing stores table if they don't exist."""
+        try:
+            cursor = self.conn.cursor()
+
+            # Check if osm_latitude column exists
+            cursor.execute("PRAGMA table_info(stores)")
+            columns = cursor.fetchall()
+            column_names = [col[1] for col in columns]
+
+            # If osm_latitude doesn't exist, run migration
+            if 'osm_latitude' not in column_names:
+                logger.info("Running OSM column migration...")
+                for sql in OSM_MIGRATION_SQL:
+                    try:
+                        cursor.execute(sql)
+                    except sqlite3.OperationalError as e:
+                        # Column might already exist from partial migration
+                        if "duplicate column name" not in str(e).lower():
+                            raise
+                self.conn.commit()
+                logger.info("OSM columns added successfully")
+            else:
+                logger.debug("OSM columns already exist")
+        except sqlite3.Error as e:
+            logger.error(f"Error during OSM migration: {e}")
             raise
 
     def upsert_store(self, store_data: Dict[str, Any]) -> int:
@@ -171,6 +202,29 @@ class DatabaseManager:
         """
         cursor = self.conn.cursor()
         rows = cursor.execute("SELECT * FROM stores ORDER BY market_id").fetchall()
+        return [dict(row) for row in rows]
+
+    def get_stores_needing_osm(self, limit: Optional[int] = None) -> List[Dict[str, Any]]:
+        """Get stores that need OSM geocoding.
+
+        Args:
+            limit: Optional limit on number of stores to return
+
+        Returns:
+            List of store dictionaries needing OSM data
+        """
+        cursor = self.conn.cursor()
+
+        sql = """
+            SELECT * FROM stores
+            WHERE osm_checked = 0 OR osm_checked IS NULL
+            ORDER BY market_id
+        """
+
+        if limit is not None:
+            sql += f" LIMIT {limit}"
+
+        rows = cursor.execute(sql).fetchall()
         return [dict(row) for row in rows]
 
     def close(self):
