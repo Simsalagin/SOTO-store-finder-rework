@@ -207,6 +207,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed instructions on adding new s
 
 ### Code Style
 - Follow strictly test-driven-development style
+- For each new feature create a feature branch
 - Follow PEP 8 guidelines
 - Use type hints where applicable
 - Write comprehensive docstrings
