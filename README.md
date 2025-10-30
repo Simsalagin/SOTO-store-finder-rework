@@ -206,6 +206,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed instructions on adding new s
 ## Development
 
 ### Code Style
+- Follow strictly test-driven-development style
 - Follow PEP 8 guidelines
 - Use type hints where applicable
 - Write comprehensive docstrings
