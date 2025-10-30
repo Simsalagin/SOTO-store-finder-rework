@@ -15,6 +15,7 @@ Usage:
 import requests
 import logging
 import math
+import time
 from typing import Optional, Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -23,12 +24,19 @@ logger = logging.getLogger(__name__)
 class OverpassClient:
     """Client for querying OSM Overpass API to find POIs."""
 
-    def __init__(self):
-        """Initialize Overpass API client with rate limiting."""
+    def __init__(self, delay_between_requests: float = 1.5):
+        """
+        Initialize Overpass API client with rate limiting.
+
+        Args:
+            delay_between_requests: Minimum seconds between requests (default: 1.5)
+        """
         self.base_url = "https://overpass-api.de/api/interpreter"
         self.query_count = 0
         self.daily_limit = 10000
         self.timeout = 30  # seconds
+        self.delay_between_requests = delay_between_requests
+        self.last_request_time = 0
 
     def search_poi_exact(self, name: str, lat: float, lon: float, radius: int = 100) -> Optional[Dict[str, Any]]:
         """
@@ -89,11 +97,20 @@ class OverpassClient:
             logger.warning(f"Daily query limit reached ({self.daily_limit})")
             return None
 
+        # Rate limiting: wait before making request if needed
+        if self.last_request_time > 0:
+            time_since_last = time.time() - self.last_request_time
+            if time_since_last < self.delay_between_requests:
+                sleep_time = self.delay_between_requests - time_since_last
+                logger.debug(f"Rate limiting: sleeping {sleep_time:.2f}s")
+                time.sleep(sleep_time)
+
         # Build Overpass QL query
         query = self._build_query(query_filter, lat, lon, radius)
 
         try:
             # Make POST request to Overpass API
+            self.last_request_time = time.time()
             response = requests.post(
                 self.base_url,
                 data={"data": query},
@@ -105,7 +122,12 @@ class OverpassClient:
 
             # Check HTTP status
             if response.status_code != 200:
-                logger.warning(f"Overpass API returned status {response.status_code}")
+                if response.status_code == 429:
+                    logger.warning("Overpass API rate limit exceeded (429) - increase delay_between_requests")
+                elif response.status_code == 504:
+                    logger.warning("Overpass API gateway timeout (504) - server overloaded, try again later")
+                else:
+                    logger.warning(f"Overpass API returned status {response.status_code}")
                 return None
 
             # Parse JSON response
