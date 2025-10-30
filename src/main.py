@@ -7,6 +7,7 @@ from typing import Optional
 
 from scrapers.biomarkt_scraper import BiomarktScraper
 from database.db_manager import DatabaseManager
+from services.geocoding_service import GeocodingService
 
 
 # Available scrapers registry
@@ -101,21 +102,66 @@ def run_scraper(scraper_name: str, db_path: str = "stores.db", verbose: bool = F
         return 1
 
 
+def run_geocoding(db_path: str = "stores.db", limit: Optional[int] = None, verbose: bool = False) -> int:
+    """Run geocoding for stores needing OSM data.
+
+    Args:
+        db_path: Path to database file
+        limit: Optional limit on number of stores to geocode
+        verbose: Enable verbose output
+
+    Returns:
+        Exit code (0 for success, 1 for error)
+    """
+    setup_logging(verbose)
+    logger = logging.getLogger(__name__)
+
+    try:
+        logger.info("Starting OSM geocoding...")
+
+        with GeocodingService(db_path) as service:
+            stats = service.geocode_all_stores(limit=limit)
+
+            logger.info("✓ Geocoding complete")
+            logger.info(f"  - Total processed: {stats['total']}")
+            logger.info(f"  - Successful: {stats['successful']}")
+            logger.info(f"  - Failed: {stats['failed']}")
+
+        return 0
+
+    except Exception as e:
+        logger.error(f"Geocoding failed: {e}", exc_info=verbose)
+        return 1
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
         description="Store scraper system - collect and store retail location data"
     )
-    parser.add_argument(
+
+    # Create mutually exclusive group for scraper and geocode
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument(
         '--scraper',
-        required=True,
         choices=SCRAPERS.keys(),
         help="Scraper to run"
     )
+    group.add_argument(
+        '--geocode',
+        action='store_true',
+        help="Run OSM geocoding for stores"
+    )
+
     parser.add_argument(
         '--db',
         default='stores.db',
         help="Database file path (default: stores.db)"
+    )
+    parser.add_argument(
+        '--limit',
+        type=int,
+        help="Limit number of stores to process (useful for testing)"
     )
     parser.add_argument(
         '--verbose', '-v',
@@ -125,7 +171,12 @@ def main():
 
     args = parser.parse_args()
 
-    exit_code = run_scraper(args.scraper, args.db, args.verbose)
+    # Run appropriate command
+    if args.geocode:
+        exit_code = run_geocoding(args.db, args.limit, args.verbose)
+    else:
+        exit_code = run_scraper(args.scraper, args.db, args.verbose)
+
     sys.exit(exit_code)
 
 

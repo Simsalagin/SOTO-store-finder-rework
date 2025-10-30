@@ -232,6 +232,37 @@ rm stores.db  # If safe to delete
 python src/main.py --scraper biomarkt
 ```
 
+## Known Issues
+
+### Scraper Data Quality Issue
+
+**Store:** Denns BioMarkt Erlangen, Turnstraße 9 (market_id=1)
+
+**Problem:** This store was scraped from biomarkt.de but does not exist in reality:
+- Not found in OpenStreetMap
+- Not found on Google Maps
+- Not listed on biomarkt.de/marktindex
+
+**Root Cause:** Scraper collected invalid data. Possible reasons:
+- Closed/moved store still in source data
+- HTML parsing error in scraper
+- Test data on biomarkt.de website
+
+**Current Status:**
+- Remains in database as market_id=1
+- Geocoding system correctly handles it (MEDIUM confidence, scraper coordinates)
+- Does NOT affect geocoding system correctness
+
+**Action Items:**
+- [ ] Investigate scraper logic in `src/scrapers/biomarkt_scraper.py`
+- [ ] Identify other potentially invalid stores (594 total)
+- [ ] Consider implementing data quality validation layer (e.g., Google Places API)
+- [ ] Manual review before production use
+
+**Note:** The geocoding system is working correctly - this is a **source data quality issue**, not a geocoding bug.
+
+---
+
 ## License
 
 [Add your license here]

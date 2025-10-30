@@ -16,10 +16,41 @@ CREATE TABLE IF NOT EXISTS stores (
     opening_day DATE,
     is_loyalty_market BOOLEAN,
     google_maps_link TEXT,
+    osm_latitude REAL,
+    osm_longitude REAL,
+    osm_checked BOOLEAN DEFAULT 0,
+    osm_checked_at TIMESTAMP,
+    osm_display_name TEXT,
+    final_latitude REAL,
+    final_longitude REAL,
+    geocoding_source TEXT,
+    geocoding_confidence TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
 """
+
+# Migration SQL for adding OSM columns to existing databases
+OSM_MIGRATION_SQL = [
+    "ALTER TABLE stores ADD COLUMN osm_latitude REAL",
+    "ALTER TABLE stores ADD COLUMN osm_longitude REAL",
+    "ALTER TABLE stores ADD COLUMN osm_checked BOOLEAN DEFAULT 0",
+    "ALTER TABLE stores ADD COLUMN osm_checked_at TIMESTAMP",
+    "ALTER TABLE stores ADD COLUMN osm_display_name TEXT"
+]
+
+# Migration SQL for adding final coordinate columns for Leaflet
+# geocoding_confidence values:
+#   - very_high: Overpass POI validated by scraper (< 100m distance)
+#   - high: Overpass POI found (no scraper validation or > 100m distance)
+#   - medium: Scraper coordinates only (no POI found)
+#   - low: Nominatim address-level geocoding
+FINAL_COORDS_MIGRATION_SQL = [
+    "ALTER TABLE stores ADD COLUMN final_latitude REAL",
+    "ALTER TABLE stores ADD COLUMN final_longitude REAL",
+    "ALTER TABLE stores ADD COLUMN geocoding_source TEXT",
+    "ALTER TABLE stores ADD COLUMN geocoding_confidence TEXT"
+]
 
 OPENING_HOURS_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS opening_hours (
