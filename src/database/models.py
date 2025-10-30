@@ -21,6 +21,10 @@ CREATE TABLE IF NOT EXISTS stores (
     osm_checked BOOLEAN DEFAULT 0,
     osm_checked_at TIMESTAMP,
     osm_display_name TEXT,
+    final_latitude REAL,
+    final_longitude REAL,
+    geocoding_source TEXT,
+    geocoding_confidence TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )
@@ -33,6 +37,14 @@ OSM_MIGRATION_SQL = [
     "ALTER TABLE stores ADD COLUMN osm_checked BOOLEAN DEFAULT 0",
     "ALTER TABLE stores ADD COLUMN osm_checked_at TIMESTAMP",
     "ALTER TABLE stores ADD COLUMN osm_display_name TEXT"
+]
+
+# Migration SQL for adding final coordinate columns for Leaflet
+FINAL_COORDS_MIGRATION_SQL = [
+    "ALTER TABLE stores ADD COLUMN final_latitude REAL",
+    "ALTER TABLE stores ADD COLUMN final_longitude REAL",
+    "ALTER TABLE stores ADD COLUMN geocoding_source TEXT",
+    "ALTER TABLE stores ADD COLUMN geocoding_confidence TEXT"
 ]
 
 OPENING_HOURS_TABLE_SQL = """
