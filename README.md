@@ -21,7 +21,7 @@ This system scrapes store information (locations, contact details, opening hours
 
 ### Biomarkt (Denns BioMarkt)
 - **Source**: https://www.biomarkt.de
-- **Stores**: ~594 stores across Germany
+- **Stores**: ~515 active and upcoming stores across Germany
 - **Data**: Store locations, contact info, opening hours, coordinates
 
 ## Installation
@@ -234,34 +234,37 @@ rm stores.db  # If safe to delete
 python src/main.py --scraper biomarkt
 ```
 
-## Known Issues
+## Data Quality Resolution
 
-### Scraper Data Quality Issue
+### Scraper Status Filtering (RESOLVED)
 
-**Store:** Denns BioMarkt Erlangen, Turnstraße 9 (market_id=1)
+**Issue:** The scraper was collecting all 596 stores from the API, including 78 inactive/closed stores (status='4') that are not displayed on biomarkt.de/marktindex.
 
-**Problem:** This store was scraped from biomarkt.de but does not exist in reality:
-- Not found in OpenStreetMap
-- Not found on Google Maps
-- Not listed on biomarkt.de/marktindex
+**Example:** market_id=1 (Turnstraße 9, Erlangen) - a status='4' store that doesn't exist in reality.
 
-**Root Cause:** Scraper collected invalid data. Possible reasons:
-- Closed/moved store still in source data
-- HTML parsing error in scraper
-- Test data on biomarkt.de website
+**Root Cause:** The API endpoint returns ALL stores regardless of status, but the website's frontend filters them based on:
+1. **Status codes:**
+   - Status `'9'`: Active, regular stores (~495 stores)
+   - Status `'5'`: New/upcoming stores (~20 stores)
+   - Status `'4'`: Old/closed/replaced stores (~78 stores) - **NOT displayed on website**
 
-**Current Status:**
-- Remains in database as market_id=1
-- Geocoding system correctly handles it (MEDIUM confidence, scraper coordinates)
-- Does NOT affect geocoding system correctness
+2. **Opening date:** Stores must have already opened or will open within 60 days
 
-**Action Items:**
-- [ ] Investigate scraper logic in `src/scrapers/biomarkt_scraper.py`
-- [ ] Identify other potentially invalid stores (594 total)
-- [ ] Consider implementing data quality validation layer (e.g., Google Places API)
-- [ ] Manual review before production use
+**Solution Implemented:**
+The scraper now replicates the exact frontend filtering logic from biomarkt.de/marktindex:
+- Only collect stores with status `'5'` or `'9'`
+- Filter out all status `'4'` stores (old/closed versions, often marked with " X" suffix)
+- Validate opening dates (exclude stores opening more than 60 days in the future)
 
-**Note:** The geocoding system is working correctly - this is a **source data quality issue**, not a geocoding bug.
+**Result:**
+- ✅ ~515 verified active and upcoming stores (down from 596)
+- ✅ market_id=1 and other invalid stores automatically filtered out
+- ✅ Data matches exactly what's visible on biomarkt.de/marktindex
+- ✅ No manual data cleanup needed
+
+**Implementation Details:**
+- See `_should_include_store()` method in [src/scrapers/biomarkt_scraper.py](src/scrapers/biomarkt_scraper.py:87-126)
+- Status filtering test in [tests/test_biomarkt_scraper.py](tests/test_biomarkt_scraper.py:143-181)
 
 ---
 

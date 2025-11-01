@@ -2,6 +2,7 @@
 
 import requests
 from typing import List, Dict, Any
+from datetime import datetime, timedelta
 
 try:
     from .base_scraper import BaseScraper
@@ -55,6 +56,15 @@ class BiomarktScraper(BaseScraper):
 
             for node in nodes:
                 try:
+                    # Apply frontend filter logic (status-based filtering)
+                    if not self._should_include_store(node):
+                        self.logger.debug(
+                            f"Filtering out store {node.get('marketId')} "
+                            f"(status={node.get('status')}, "
+                            f"openingDay={node.get('openingDay')})"
+                        )
+                        continue
+
                     store_data = self._parse_store(node)
                     if validate_store_data(store_data):
                         stores.append(store_data)
@@ -73,6 +83,47 @@ class BiomarktScraper(BaseScraper):
             raise
 
         return stores
+
+    def _should_include_store(self, node: Dict[str, Any]) -> bool:
+        """Filter stores based on frontend logic from biomarkt.de/marktindex.
+
+        Replicates the exact filtering logic from the website's JavaScript:
+        - Only include stores with status '5' (new/upcoming) or '9' (active)
+        - Only include stores that have already opened or will open soon (<60 days)
+        - Filter out status '4' stores (old/closed versions)
+
+        Args:
+            node: Store node from JSON
+
+        Returns:
+            True if store should be included, False otherwise
+        """
+        status = node.get('status', '')
+        opening_day_str = node.get('openingDay', '')
+
+        # Frontend logic: Only status '5' or '9' are visible
+        # Status '4' stores are old/closed versions (often with " X" suffix)
+        if status not in ['5', '9']:
+            return False
+
+        # Check opening day constraint
+        if opening_day_str:
+            try:
+                opening_date = datetime.strptime(opening_day_str, '%Y-%m-%d')
+                today = datetime.now()
+
+                # aboutToOpen: stores opening within 60 days
+                # afterOpeningDate: stores that have already opened
+                if opening_date > today + timedelta(days=60):
+                    return False
+            except ValueError:
+                # Invalid date format, skip validation
+                self.logger.warning(
+                    f"Invalid date format for store {node.get('marketId')}: "
+                    f"{opening_day_str}"
+                )
+
+        return True
 
     def _parse_store(self, node: Dict[str, Any]) -> Dict[str, Any]:
         """Parse individual store node.

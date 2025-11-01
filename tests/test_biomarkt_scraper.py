@@ -130,9 +130,52 @@ def test_full_scrape():
     scraper = BiomarktScraper()
     stores = scraper.scrape()
 
-    assert len(stores) > 500  # Should have around 596 stores
+    # After filtering (status '4' stores removed), expect ~515 stores
+    # (495 active status='9' + ~20 upcoming status='5')
+    assert len(stores) > 490, f"Expected > 490 stores, got {len(stores)}"
     assert all('market_id' in store for store in stores)
 
     # Check for duplicates
     market_ids = [s['market_id'] for s in stores]
     assert len(market_ids) == len(set(market_ids)), "Duplicate market_ids found"
+
+
+@pytest.mark.integration
+def test_status_filtering():
+    """Test that status filtering works correctly.
+
+    This test verifies that the scraper filters out stores based on
+    the frontend logic from biomarkt.de/marktindex:
+    - Status '4' stores should be filtered out (old/closed versions)
+    - Status '5' and '9' stores should be included
+    """
+    scraper = BiomarktScraper()
+
+    # Fetch and parse data
+    raw_data = scraper.fetch_data()
+    stores = scraper.parse_data(raw_data)
+
+    # Check that no status='4' stores are included
+    status_4_stores = [s for s in stores if s.get('status') == '4']
+    assert len(status_4_stores) == 0, (
+        f"Found {len(status_4_stores)} status='4' stores, expected 0. "
+        f"These should have been filtered out."
+    )
+
+    # Verify that the problematic market_id='1' (Turnstraße 9) is filtered out
+    market_id_1 = [s for s in stores if s.get('market_id') == 1]
+    assert len(market_id_1) == 0, (
+        "market_id=1 (Turnstraße 9, Erlangen) should be filtered out "
+        "(status='4')"
+    )
+
+    # Check that we have both status='5' and status='9' stores
+    status_5_stores = [s for s in stores if s.get('status') == '5']
+    status_9_stores = [s for s in stores if s.get('status') == '9']
+
+    assert len(status_9_stores) > 450, (
+        f"Expected > 450 status='9' stores, got {len(status_9_stores)}"
+    )
+    assert len(status_5_stores) > 0, (
+        f"Expected some status='5' stores, got {len(status_5_stores)}"
+    )
